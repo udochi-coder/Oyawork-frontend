@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body { @apply bg-[#EEF2F0] text-ink antialiased font-sans; }
+  input, textarea, select, button { font: inherit; }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-[15px] font-semibold transition active:scale-[.99] disabled:opacity-50 disabled:pointer-events-none; }
+  .btn-primary { @apply btn bg-brand text-white hover:bg-[#1FB455]; }
+  .btn-outline { @apply btn border border-brand text-brand-dark bg-white hover:bg-brand-tint; }
+  .btn-ghost { @apply btn border border-line bg-white text-ink hover:bg-surface; }
+  .btn-danger { @apply btn bg-danger text-white hover:bg-red-600; }
+  .btn-danger-outline { @apply btn border border-line bg-white text-danger hover:bg-danger-soft; }
+  .btn-sm { @apply px-3 py-2 text-[13px] rounded-lg; }
+  .input { @apply w-full rounded-xl border border-line bg-surface px-4 py-3.5 text-[15px] text-ink placeholder:text-subtle outline-none focus:border-brand focus:ring-2 focus:ring-brand/20; }
+  .label { @apply mb-1.5 block text-[13px] font-semibold text-ink; }
+  .card { @apply rounded-2xl border border-line bg-white p-4; }
+  .card-soft { @apply rounded-2xl bg-surface p-4; }
+  .chip { @apply inline-flex items-center gap-1 rounded-full border border-line bg-white px-3.5 py-2 text-[13px] font-semibold text-ink; }
+  .chip-on { @apply chip border-brand bg-brand text-white; }
+  .pill { @apply rounded-full bg-field px-3 py-1 text-[12px] font-semibold text-muted; }
+  .tag { @apply inline-flex items-center rounded-md bg-brand-soft px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brand-dark; }
+  .h1 { @apply text-[22px] font-bold leading-tight text-ink; }
+  .sub { @apply text-[13px] text-subtle; }
+}
+
+.leaflet-container { font: inherit; }
