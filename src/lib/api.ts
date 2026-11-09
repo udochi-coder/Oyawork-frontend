@@ -112,9 +112,14 @@ export async function api<T = any>(path: string, opts: Options = {}, retry = tru
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    /* non-JSON (e.g. HTML error page) */
+    // Non-JSON reply (e.g. an HTML error page from the server or a proxy): never show the raw markup.
+    data = null;
   }
-  if (!res.ok) throw new ApiError(res.status, data);
+  if (!res.ok) {
+    if (res.status >= 500) data = { error: "Something went wrong on our side. Please try again in a moment." };
+    else if (data === null) data = { error: `Something went wrong (${res.status}). Please try again.` };
+    throw new ApiError(res.status, data);
+  }
   return data as T;
 }
 

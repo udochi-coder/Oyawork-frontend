@@ -1,5 +1,5 @@
 import {
-  AlertTriangle, Banknote, Camera, Car, Check, CheckCircle2, CircleDot, CreditCard, Image as ImageIcon, Info, Lock, MapPin,
+  AlertTriangle, Banknote, Camera, Car, Check, CheckCircle2, CircleDot, Image as ImageIcon, Info, Lock, MapPin,
   MessageCircle, Navigation, Phone, ShieldCheck, Star, Upload, Wallet,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -110,7 +110,7 @@ function EmployerPay({ b, setB }: Props) {
   const [forOther, setForOther] = useState(b.for_someone_else);
   const [r, setR] = useState({ recipient_name: b.recipient_name, recipient_relationship: b.recipient_relationship, recipient_phone: b.recipient_phone,
     service_address: b.service_address || b.job.location });
-  const [method, setMethod] = useState<"card" | "bank_transfer" | "wallet">("bank_transfer");
+  const [method, setMethod] = useState<"bank_transfer" | "wallet">("bank_transfer");
   const wallet = useApi<WalletInfo>("/wallet/");
   const act = useBookingAction(b, setB);
   const pay = useAction(async () => {
@@ -159,8 +159,7 @@ function EmployerPay({ b, setB }: Props) {
     );
   }
   const methods = [
-    ["card", "Debit Card (Paystack)", <CreditCard size={17} key="c" />],
-    ["bank_transfer", "Bank Transfer", <Banknote size={17} key="b" />],
+    ["bank_transfer", "Bank Transfer (Paystack)", <Banknote size={17} key="b" />],
     ["wallet", `OyaWork Wallet (${naira(wallet.data?.balance)})`, <Wallet size={17} key="w" />],
   ] as const;
   return (

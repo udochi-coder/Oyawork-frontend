@@ -22,7 +22,7 @@ export function WalletPage() {
     await reload();
   });
   const fund = useAction(async () => {
-    const res = await post<any>("/wallet/fund/", { amount: w.amount.replace(/\D/g, ""), method: "card" });
+    const res = await post<any>("/wallet/fund/", { amount: w.amount.replace(/\D/g, ""), method: "bank_transfer" });
     if (res.authorization_url) window.location.href = res.authorization_url;
     else {
       setMode("none");
