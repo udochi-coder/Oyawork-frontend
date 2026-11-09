@@ -14,10 +14,29 @@ export function WalletPage() {
   const { me } = useAuth();
   const { data, loading, reload } = useApi<WalletInfo>("/wallet/");
   const [mode, setMode] = useState<"none" | "withdraw" | "fund">("none");
-  const [w, setW] = useState({ amount: "", bank_name: "GTBank", account_number: "", account_name: me?.full_name || "" });
+  const [w, setW] = useState({ amount: "", bank_name: "GTBank", bank_code: "", account_number: "", account_name: me?.full_name || "" });
+  const [sentNote, setSentNote] = useState<string | null>(null);
+  // With Paystack Transfers on, banks come from Paystack and payouts go out automatically.
+  const banks = useApi<{ auto: boolean; banks: { name: string; code: string }[] }>(mode === "withdraw" ? "/wallet/banks/" : null);
+  const auto = Boolean(banks.data?.auto);
+  const [holder, setHolder] = useState<{ name: string | null; error: string | null; busy: boolean }>({ name: null, error: null, busy: false });
+  useEffect(() => {
+    setHolder({ name: null, error: null, busy: false });
+    if (!auto || w.account_number.length !== 10 || !w.bank_code) return;
+    let alive = true;
+    setHolder({ name: null, error: null, busy: true });
+    get<{ account_name: string }>(`/wallet/resolve-account/?account_number=${w.account_number}&bank_code=${w.bank_code}`)
+      .then((r) => alive && setHolder({ name: r.account_name, error: null, busy: false }))
+      .catch((err) => alive && setHolder({ name: null, error: (err as Error).message, busy: false }));
+    return () => {
+      alive = false;
+    };
+  }, [auto, w.account_number, w.bank_code]);
   const withdraw = useAction(async () => {
-    await post("/wallet/withdraw/", { ...w, amount: w.amount.replace(/\D/g, "") });
+    const txn = await post<{ status: string }>("/wallet/withdraw/", { ...w, account_name: holder.name || w.account_name, amount: w.amount.replace(/\D/g, "") });
     setMode("none");
+    setSentNote(auto ? (txn.status === "success" ? "Withdrawal sent to your bank." : "Withdrawal sent. It usually lands in your bank within a few minutes.")
+      : "Withdrawal requested. We'll send it to your bank within 24 hours.");
     setW({ ...w, amount: "" });
     await reload();
   });
@@ -40,20 +59,43 @@ export function WalletPage() {
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <Button onClick={() => setMode(mode === "withdraw" ? "none" : "withdraw")}>Withdraw to Bank</Button>
+        <Button onClick={() => { setSentNote(null); setMode(mode === "withdraw" ? "none" : "withdraw"); }}>Withdraw to Bank</Button>
         <Button variant="outline" onClick={() => setMode(mode === "fund" ? "none" : "fund")}>Fund Wallet</Button>
       </div>
+      {sentNote && mode === "none" && <div className="mt-3"><InfoNote tone="green">{sentNote}</InfoNote></div>}
       {mode !== "none" && (
         <div className="card mt-3 space-y-3">
           <Field label="Amount (₦)"><input className="input" inputMode="numeric" value={w.amount} onChange={(e) => setW({ ...w, amount: e.target.value.replace(/\D/g, "") })} placeholder="10000" /></Field>
           {mode === "withdraw" ? (
             <>
-              <Field label="Bank">
-                <select className="input" value={w.bank_name} onChange={(e) => setW({ ...w, bank_name: e.target.value })}>{NIGERIAN_BANKS.map((b) => <option key={b}>{b}</option>)}</select>
-              </Field>
-              <Field label="Account number"><input className="input" inputMode="numeric" maxLength={10} value={w.account_number} onChange={(e) => setW({ ...w, account_number: e.target.value.replace(/\D/g, "") })} placeholder="0123456789" /></Field>
-              <Field label="Account name"><input className="input" value={w.account_name} onChange={(e) => setW({ ...w, account_name: e.target.value })} /></Field>
-              <Button busy={withdraw.busy} disabled={!w.amount || w.account_number.length !== 10} onClick={() => withdraw.run()}>Request withdrawal</Button>
+              {auto ? (
+                <>
+                  <Field label="Bank">
+                    <select className="input" value={w.bank_code} onChange={(e) => {
+                      const bank = banks.data!.banks.find((b) => b.code === e.target.value);
+                      setW({ ...w, bank_code: e.target.value, bank_name: bank?.name || "" });
+                    }}>
+                      <option value="">Choose your bank</option>
+                      {banks.data!.banks.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Account number"><input className="input" inputMode="numeric" maxLength={10} value={w.account_number} onChange={(e) => setW({ ...w, account_number: e.target.value.replace(/\D/g, "") })} placeholder="0123456789" /></Field>
+                  {holder.busy && <p className="text-[13px] text-muted">Checking account…</p>}
+                  {holder.name && <InfoNote tone="green"><CheckCircle2 size={14} className="mr-1 inline" />{holder.name}</InfoNote>}
+                  <ErrorNote>{holder.error}</ErrorNote>
+                  <Button busy={withdraw.busy} disabled={!w.amount || !holder.name} onClick={() => withdraw.run()}>Withdraw {w.amount ? naira(w.amount) : ""}</Button>
+                </>
+              ) : banks.loading ? <Spinner /> : (
+                <>
+                  <ErrorNote>{banks.error?.message}</ErrorNote>
+                  <Field label="Bank">
+                    <select className="input" value={w.bank_name} onChange={(e) => setW({ ...w, bank_name: e.target.value })}>{NIGERIAN_BANKS.map((b) => <option key={b}>{b}</option>)}</select>
+                  </Field>
+                  <Field label="Account number"><input className="input" inputMode="numeric" maxLength={10} value={w.account_number} onChange={(e) => setW({ ...w, account_number: e.target.value.replace(/\D/g, "") })} placeholder="0123456789" /></Field>
+                  <Field label="Account name"><input className="input" value={w.account_name} onChange={(e) => setW({ ...w, account_name: e.target.value })} /></Field>
+                  <Button busy={withdraw.busy} disabled={!w.amount || w.account_number.length !== 10} onClick={() => withdraw.run()}>Request withdrawal</Button>
+                </>
+              )}
               <ErrorNote>{withdraw.error}</ErrorNote>
             </>
           ) : (
