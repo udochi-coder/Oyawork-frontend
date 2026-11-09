@@ -48,10 +48,14 @@ export interface Me {
   email: string | null;
   role: Role;
   phone_verified: boolean;
+  email_verified?: boolean;
   worker_profile: WorkerProfile | null;
   employer_profile: EmployerProfile | null;
   verification: {
     phone: DocState; identity: DocState; face: DocState; address: DocState; complete: boolean;
+    email?: DocState;
+    /** Which ways of receiving a code are switched on. */
+    channels?: { sms: boolean; email: boolean };
     /** True when NINs are matched automatically, which needs a selfie. */
     face_required?: boolean;
     /** Why a document was rejected or is waiting for review. */

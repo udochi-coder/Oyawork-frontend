@@ -106,7 +106,7 @@ export function Register() {
                 onChange={set("phone_number")} placeholder="813 456 7890" autoComplete="tel-national" />
             </div>
           </Field>
-          <Field label="Email Address (Optional)" error={error?.field("email")}>
+          <Field label="Email Address (Recommended)" error={error?.field("email")} hint="Used to send you a code if you forget your password.">
             <input className="input" type="email" value={values.email} onChange={set("email")} placeholder="e.g. jide.bayo@gmail.com" autoComplete="email" />
           </Field>
           <Field label="Password" error={error?.field("password")} hint="At least 8 characters, not just numbers.">
@@ -146,8 +146,9 @@ function StatusRow({ title, body, state, onAction, actionLabel }: {
 export function VerifyIdentity() {
   const { me, setMe } = useAuth();
   const navigate = useNavigate();
-  const [panel, setPanel] = useState<"phone" | "nin" | "face" | null>(null);
+  const [panel, setPanel] = useState<"phone" | "email" | "nin" | "face" | null>(null);
   const [otp, setOtp] = useState<{ sent: boolean; demo?: string }>({ sent: false });
+  const [mail, setMail] = useState<{ sent: boolean; demo?: string; address: string; code: string }>({ sent: false, address: "", code: "" });
   const [code, setCode] = useState("");
   const [nin, setNin] = useState("");
   const [busy, setBusy] = useState(false);
@@ -156,6 +157,7 @@ export function VerifyIdentity() {
   if (!me) return null;
   const v = me.verification;
   const notes = v.notes || {};
+  const channels = v.channels || { sms: true, email: false };
   const isWorker = me.role === "worker";
   const masked = `+234 ${me.phone_number.slice(1, 4)} ••• ••${me.phone_number.slice(-2)}`;
 
@@ -177,6 +179,14 @@ export function VerifyIdentity() {
   const checkCode = () => run(async () => {
     setMe(await post<Me>("/me/verification/phone/verify/", { code }));
     setPanel((p) => (p === "phone" ? null : p));
+  });
+  const sendEmailCode = () => run(async () => {
+    const r = await post<{ sent: boolean; email: string; demo_code?: string }>("/me/verification/email/send/", { email: mail.address || me.email });
+    setMail((m) => ({ ...m, sent: true, demo: r.demo_code, address: r.email }));
+  });
+  const checkEmailCode = () => run(async () => {
+    setMe(await post<Me>("/me/verification/email/verify/", { code: mail.code }));
+    setPanel((p) => (p === "email" ? null : p));
   });
   const submitDoc = (data: Record<string, any>) => run(async () => {
     const r = await api<{ me: Me }>("/me/verification/", { method: "POST", body: form(data) });
@@ -201,6 +211,7 @@ export function VerifyIdentity() {
         </div>
       </div>
       <div className="mt-4 space-y-3">
+        {(channels.sms || v.phone === "verified") && (<>
         <StatusRow title="Phone Verification" body={v.phone === "verified" ? `Verified via ${masked}` : "Confirm your number with an SMS code"}
           state={v.phone} onAction={() => { setPanel("phone"); }} actionLabel="Verify" />
         {panel === "phone" && (
@@ -211,6 +222,32 @@ export function VerifyIdentity() {
                 <input className="input text-center text-xl tracking-[.5em]" inputMode="numeric" maxLength={6} value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} placeholder="••••••" />
                 <Button busy={busy} disabled={code.length !== 6} onClick={checkCode}>Confirm code</Button>
+              </>
+            )}
+          </div>
+        )}
+        </>)}
+        {channels.email && (
+          <StatusRow title="Email Verification"
+            body={v.email === "verified" ? `Verified: ${me.email}` : "Add an email so you can reset your password"}
+            state={v.email || "missing"} onAction={() => { setMail((m) => ({ ...m, address: m.address || me.email || "" })); setPanel("email"); }} actionLabel="Verify" />
+        )}
+        {panel === "email" && (
+          <div className="card space-y-3">
+            {!mail.sent ? (
+              <>
+                <input className="input" type="email" value={mail.address} onChange={(e) => setMail({ ...mail, address: e.target.value })}
+                  placeholder="e.g. jide.bayo@gmail.com" autoComplete="email" />
+                <Button busy={busy} disabled={!/^\S+@\S+\.\S+$/.test(mail.address)} onClick={sendEmailCode}>Email me a code</Button>
+              </>
+            ) : (
+              <>
+                {mail.demo ? <InfoNote tone="warn">Test mode: email isn't set up yet, so your code is <b>{mail.demo}</b>.</InfoNote>
+                  : <p className="text-[13px] text-muted">We sent a 6-digit code to <b>{mail.address}</b>. Check your spam folder if it isn't there.</p>}
+                <input className="input text-center text-xl tracking-[.5em]" inputMode="numeric" maxLength={6} value={mail.code}
+                  onChange={(e) => setMail({ ...mail, code: e.target.value.replace(/\D/g, "") })} placeholder="••••••" autoComplete="one-time-code" />
+                <Button busy={busy} disabled={mail.code.length !== 6} onClick={checkEmailCode}>Confirm code</Button>
+                <button type="button" onClick={() => setMail({ ...mail, sent: false, code: "" })} className="text-[13px] font-semibold text-brand-dark">Use a different email</button>
               </>
             )}
           </div>
@@ -543,7 +580,7 @@ export function ForgotPassword() {
   const { setSession } = useAuth();
   const navigate = useNavigate();
   const [step, setStep] = useState<"phone" | "reset">("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(""); // phone number or email address
   const [demoCode, setDemoCode] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [pw, setPw] = useState({ a: "", b: "" });
@@ -555,7 +592,7 @@ export function ForgotPassword() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ demo_code?: string }>("/auth/password-reset/", { method: "POST", body: { phone_number: phone }, auth: false });
+      const r = await api<{ demo_code?: string }>("/auth/password-reset/", { method: "POST", body: { identifier: phone.trim() }, auth: false });
       setDemoCode(r.demo_code || null);
       setStep("reset");
     } catch (err) {
@@ -572,7 +609,7 @@ export function ForgotPassword() {
     setError(null);
     try {
       const res = await api<{ access: string; refresh: string; user: Me }>("/auth/password-reset/confirm/", {
-        method: "POST", body: { phone_number: phone, code, new_password: pw.a }, auth: false });
+        method: "POST", body: { identifier: phone.trim(), code, new_password: pw.a }, auth: false });
       setSession(res, res.user);
       navigate("/home", { replace: true });
     } catch (err) {
@@ -587,14 +624,11 @@ export function ForgotPassword() {
       <form onSubmit={sendCode} className="h-full">
         <Screen header={<Header title="Reset Password" back="/login" />} footer={<Button type="submit" busy={busy} disabled={!phone}>Send Reset Code</Button>}>
           <h2 className="h1 mt-6">Forgot your password?</h2>
-          <p className="sub mt-1.5">Enter the phone number on your account. We'll text you a 6-digit code to set a new password.</p>
+          <p className="sub mt-1.5">Enter the phone number or email on your account. We'll send you a 6-digit code to set a new password.</p>
           <div className="mt-6">
-            <Field label="Phone Number">
-              <div className="flex items-center rounded-xl border border-line bg-surface focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20">
-                <span className="whitespace-nowrap pl-4 pr-2 text-[14px] font-semibold">+234</span>
-                <input className="w-full bg-transparent py-3.5 pr-4 outline-none" required inputMode="tel" value={phone}
-                  onChange={(e) => setPhone(e.target.value)} placeholder="802 345 6789" autoComplete="tel-national" />
-              </div>
+            <Field label="Phone Number or Email">
+              <input className="input" required value={phone} onChange={(e) => setPhone(e.target.value)}
+                placeholder="0802 345 6789 or you@email.com" autoComplete="username" autoCapitalize="none" />
             </Field>
           </div>
           <div className="mt-4"><ErrorNote>{error?.message}</ErrorNote></div>
@@ -607,8 +641,9 @@ export function ForgotPassword() {
       <Screen header={<Header title="Reset Password" onBack={() => setStep("phone")} />}
         footer={<Button type="submit" busy={busy} disabled={code.length !== 6 || !pw.a}>Set New Password</Button>}>
         <h2 className="h1 mt-6">Enter your code</h2>
-        <p className="sub mt-1.5">If {phone} has an OyaWork account, a code is on its way. It expires in 10 minutes.</p>
-        {demoCode && <div className="mt-4"><InfoNote tone="warn">Test mode: SMS isn't set up yet, so your code is <b>{demoCode}</b>.</InfoNote></div>}
+        <p className="sub mt-1.5">If {phone.trim()} matches an OyaWork account, a code is on its way{phone.includes("@") ? " to that email" : " by SMS, or to the email on the account"}. It expires in 10 minutes. Check your spam folder too.</p>
+        <p className="mt-2 text-[12.5px] text-muted">Never added an email and no code arrived? Contact OyaWork support to get back into your account.</p>
+        {demoCode && <div className="mt-4"><InfoNote tone="warn">Test mode: SMS and email aren't set up yet, so your code is <b>{demoCode}</b>.</InfoNote></div>}
         <div className="mt-5 space-y-4">
           <Field label="6-digit code" error={error?.field("code")}>
             <input className="input text-center text-xl tracking-[.5em]" inputMode="numeric" maxLength={6} value={code}
